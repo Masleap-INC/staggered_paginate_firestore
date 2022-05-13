@@ -41,6 +41,7 @@ class PaginateFirestore extends StatefulWidget {
     this.listeners,
     this.scrollController,
     this.allowImplicitScrolling = false,
+    this.keyboardDismissBehavior = ScrollViewKeyboardDismissBehavior.manual,
     this.pageController,
     this.onPageChanged,
     this.header,
@@ -62,6 +63,7 @@ class PaginateFirestore extends StatefulWidget {
   final Query query;
   final bool reverse;
   final bool allowImplicitScrolling;
+  final ScrollViewKeyboardDismissBehavior keyboardDismissBehavior;
   final ScrollController? scrollController;
   final PageController? pageController;
   final Axis scrollDirection;
@@ -101,11 +103,13 @@ class _PaginateFirestoreState extends State<PaginateFirestore> {
       bloc: _cubit,
       builder: (context, state) {
         if (state is PaginationInitial) {
-          return widget.initialLoader;
+          return _buildWithScrollView(context, widget.initialLoader);
         } else if (state is PaginationError) {
-          return (widget.onError != null)
-              ? widget.onError!(state.error)
-              : ErrorDisplay(exception: state.error);
+          return _buildWithScrollView(
+              context,
+              (widget.onError != null)
+                  ? widget.onError!(state.error)
+                  : ErrorDisplay(exception: state.error));
         } else {
           final loadedState = state as PaginationLoaded;
           if (widget.onLoaded != null) {
@@ -116,7 +120,7 @@ class _PaginateFirestoreState extends State<PaginateFirestore> {
           }
 
           if (loadedState.documentSnapshots.isEmpty) {
-            return widget.onEmpty;
+            return _buildWithScrollView(context, widget.onEmpty);
           }
           return widget.itemBuilderType == PaginateBuilderType.listView
               ? _buildListView(loadedState)
@@ -125,6 +129,16 @@ class _PaginateFirestoreState extends State<PaginateFirestore> {
                   : _buildPageView(loadedState);
         }
       },
+    );
+  }
+
+  Widget _buildWithScrollView(BuildContext context, Widget child) {
+    return SingleChildScrollView(
+      child: Container(
+        alignment: Alignment.center,
+        height: MediaQuery.of(context).size.height,
+        child: child,
+      ),
     );
   }
 
@@ -165,7 +179,7 @@ class _PaginateFirestoreState extends State<PaginateFirestore> {
   }
 
   Widget _buildGridView(PaginationLoaded loadedState) {
-    var staggedGridView = MasonryGridView.count(
+    var staggeredGridView = MasonryGridView.count(
         crossAxisCount: 2,
         mainAxisSpacing: 1,
         crossAxisSpacing: 4,
@@ -187,52 +201,18 @@ class _PaginateFirestoreState extends State<PaginateFirestore> {
           );
         });
 
-    var gridView = CustomScrollView(
-      reverse: widget.reverse,
-      controller: widget.scrollController,
-      shrinkWrap: widget.shrinkWrap,
-      scrollDirection: widget.scrollDirection,
-      physics: widget.physics,
-      slivers: [
-        if (widget.header != null) widget.header!,
-        SliverPadding(
-          padding: widget.padding,
-          sliver: SliverGrid(
-            gridDelegate: widget.gridDelegate,
-            delegate: SliverChildBuilderDelegate(
-              (context, index) {
-                if (index >= loadedState.documentSnapshots.length) {
-                  _cubit!.fetchPaginatedList();
-                  return widget.bottomLoader;
-                }
-                return widget.itemBuilder(
-                  context,
-                  loadedState.documentSnapshots,
-                  index,
-                );
-              },
-              childCount: loadedState.hasReachedEnd
-                  ? loadedState.documentSnapshots.length
-                  : loadedState.documentSnapshots.length + 1,
-            ),
-          ),
-        ),
-        if (widget.footer != null) widget.footer!,
-      ],
-    );
-
     if (widget.listeners != null && widget.listeners!.isNotEmpty) {
       return MultiProvider(
         providers: widget.listeners!
             .map((_listener) => ChangeNotifierProvider(
-                  create: (context) => _listener,
-                ))
+          create: (context) => _listener,
+        ))
             .toList(),
-        child: staggedGridView, //gridView,
+        child: staggeredGridView, //gridView,
       );
     }
 
-    return staggedGridView; //gridView;
+    return staggeredGridView; //gridView;
   }
 
   Widget _buildListView(PaginationLoaded loadedState) {
@@ -242,6 +222,7 @@ class _PaginateFirestoreState extends State<PaginateFirestore> {
       shrinkWrap: widget.shrinkWrap,
       scrollDirection: widget.scrollDirection,
       physics: widget.physics,
+      keyboardDismissBehavior: widget.keyboardDismissBehavior,
       slivers: [
         if (widget.header != null) widget.header!,
         SliverPadding(
